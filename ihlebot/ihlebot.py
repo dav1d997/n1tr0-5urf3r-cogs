@@ -228,10 +228,79 @@ class Ihlebot:
             color = discord.Embed.Empty
         return color
 
+   #mensa
     @commands.command(pass_context=True)
     async def mensa(self, ctx):
         user = ctx.message.author
         color = self.getColor(user)
+
+        # Get current calendarweek
+        today = datetime.datetime.now()
+        cal_week = today.strftime("%W")
+        weekday = datetime.datetime.today().weekday()
+        week_start = today - datetime.timedelta(days=weekday)
+        week_end = today + datetime.timedelta(days=4 - weekday)
+
+        url_mensa = "https://www.my-stuwe.de/mensa/mensa-morgenstelle-tuebingen/?woche={}".format(cal_week)
+
+        r = requests.get(url_mensa)
+        html_mensa = re.sub('\n', ' ', r.content.decode('utf8'))
+        tagesmenu = re.findall(r"(<td>Tagesmenü</td>.*?)(</td>)", html_mensa)
+        tagesmenu_veg = re.findall(r"(<td>Tagesmenü vegetarisch</td>.*?)(</td>)", html_mensa)
+        # Probably should make an regex OR
+        mensa_vital = re.findall(r"(<td>mensaVital.*?</td>.*?)(</td>)", html_mensa)
+
+        def cleanUp(menu):
+            daily_menu = []
+            for m in menu:
+                t_menu = re.sub("(<.*?>)", "", m[0])
+                t_menu = re.sub("  |, ", "\n- ", t_menu)
+                t_menu = re.sub("Tagessuppe ", "Tagessuppe\n- ", t_menu)
+                t_menu = re.sub("Tagesmenü vegetarisch|Tagesmenü|mensaVital vegan|mensaVital vegetarisch|mensaVital", "", t_menu)
+                daily_menu.append((t_menu))
+            return daily_menu
+
+        menu1 = cleanUp(tagesmenu)
+        menu2 = cleanUp(tagesmenu_veg)
+        menu3 = cleanUp(mensa_vital)
+        embed = discord.Embed(
+            description="Mensa Morgenstelle, KW {} vom {} bis {}".format(cal_week, week_start.strftime("%d.%m."),
+                                                                         week_end.strftime("%d.%m.")), color=color)
+
+        if weekday > 0:
+            counter = 0 + weekday
+        else:
+            counter = 0
+        wochentage = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"]
+        for speise in menu1:
+            try:
+                vegetarisch = menu2[counter - weekday]
+            except IndexError:
+                vegetarisch = ""
+            try:
+                vegan = menu3[counter - weekday]
+            except IndexError:
+                vegan = ""
+            embed.add_field(name="{}".format(wochentage[counter]),
+                            value="*Tagesmenü:*\n- {}\n\n*Tagesmenü vegetarisch:*\n- {}\n\n*MensaVital:*\n- {}\n".format(
+                                speise, vegetarisch, vegan), inline=False)
+            counter += 1
+
+        embed.set_thumbnail(
+            url='https://upload.wikimedia.org/wikipedia/commons/thumb/b/bf/Studentenwerk_T%C3%BCbingen-Hohenheim_logo.svg/220px-Studentenwerk_T%C3%BCbingen-Hohenheim_logo.svg.png')
+        embed.set_footer(text='(c) Fabian Ihle')
+        await self.bot.say(embed=embed)
+        
+        #mensa with options
+        #Options: -a for full menu, -nw for next week 
+        @commands.command(pass_context=True)
+    async def mensa(self, ctx, options=None):
+        user = ctx.message.author
+        color = self.getColor(user)
+        
+        #set flags
+        sall = true if "a" in options else false
+        nweek = true if "nw" in options else false
 
         # Get current calendarweek
         today = datetime.datetime.now()
